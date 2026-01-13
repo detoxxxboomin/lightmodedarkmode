@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Light vs Dark Mode Experiment</title>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 700px;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin: 20px;
+            width: 95%;
+        }
+
+        /* Light Mode Styles */
+        .light-mode-bg { background-color: #ffffff; color: #000000; }
+        .light-mode-bg .container { background-color: #f9f9f9; border: 1px solid #ddd; }
+
+        /* Dark Mode Styles */
+        .dark-mode-bg { background-color: #121212; color: #ffffff; }
+        .dark-mode-bg .container { background-color: #1e1e1e; border: 1px solid #333; }
+
+        h1, h2 { margin-top: 0; }
+        p { line-height: 1.6; font-size: 1.1rem; }
+
+        button {
+            padding: 12px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            margin-top: 20px;
+            width: 100%;
+            font-weight: bold;
+        }
+
+        button.secondary { background-color: #2196F3; }
+        button:hover { opacity: 0.9; }
+
+        .hidden { display: none; }
+        .survey-box { background: #eee; padding: 15px; border-radius: 8px; margin: 20px 0; color: black; }
+        .question { margin-bottom: 15px; padding: 10px; border-bottom: 1px solid #ccc; }
+        label { display: block; margin: 5px 0; cursor: pointer; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 0.8rem; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .dark-mode-bg th, .dark-mode-bg td { border-color: #444; }
+        
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.8); display: flex; justify-content: center;
+            align-items: center; z-index: 1000; font-weight: bold; color: black;
+        }
+
+        .id-badge {
+            font-family: monospace;
+            background: #ddd;
+            padding: 2px 5px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="light-mode-bg">
+
+    <div id="loading-overlay" class="hidden">Connecting to Database...</div>
+
+    <!-- Screen 1: Introduction & Survey -->
+    <div id="intro-screen" class="container">
+        <h1>Science Project: Light vs. Dark</h1>
+        <p>Help me find out if screen colors change how we read!</p>
+        
+        <div class="survey-box">
+            <p><strong>Environment Check:</strong></p>
+            <p>What is the lighting like in your room?</p>
+            <label><input type="radio" name="room-light" value="Bright"> Brightly Lit (Sunny/Overhead)</label>
+            <label><input type="radio" name="room-light" value="Dim"> Dimly Lit (Dark/Low Light)</label>
+        </div>
+
+        <button onclick="checkSurveyAndStart()">Start Reading Test</button>
+        <button class="secondary" onclick="showDashboard()">📊 View Project Results (Spreadsheet)</button>
+        <p id="survey-error" style="color: red; display: none; margin-top: 10px;">Please pick a room lighting option!</p>
+    </div>
+
+    <!-- Story/Quiz Screens -->
+    <div id="story-a-screen" class="container hidden">
+        <h2>Story 1: The Lost Key</h2>
+        <p>Sammy was playing in the backyard when he realized his pocket felt light. He tapped his jeans. Empty! The shiny silver key to the garden shed was gone. "Oh no," Sammy whispered. His dad needed that key to get the lawnmower.</p>
+        <p>Sammy retraced his steps. He looked by the swings. Nothing. He looked inside the sandbox. Nothing but sand. He started to worry. The sun was getting hot, and he wiped sweat from his forehead.</p>
+        <p>Just then, he saw a glimmer near the flower pots. A crow was hopping away from a shiny object. It was the key! The crow must have tried to steal it. Sammy grabbed the key and ran inside, happy that he had saved the day.</p>
+        <button onclick="finishStoryA()">I'm Finished Reading</button>
+    </div>
+
+    <div id="quiz-a-screen" class="container hidden">
+        <h2>Quiz 1</h2>
+        <div class="question"><p>1. What did Sammy lose?</p>
+            <label><input type="radio" name="q1" value="coin"> A gold coin</label>
+            <label><input type="radio" name="q1" value="key"> A silver key</label>
+            <label><input type="radio" name="q1" value="toy"> A toy car</label>
+        </div>
+        <div class="question"><p>2. Where did he find it?</p>
+            <label><input type="radio" name="q2" value="sandbox"> In the sandbox</label>
+            <label><input type="radio" name="q2" value="flower"> Near the flower pots</label>
+            <label><input type="radio" name="q2" value="grass"> In the tall grass</label>
+        </div>
+        <div class="question"><p>3. What animal was near the item?</p>
+            <label><input type="radio" name="q3" value="dog"> A dog</label>
+            <label><input type="radio" name="q3" value="crow"> A crow</label>
+            <label><input type="radio" name="q3" value="cat"> A cat</label>
+        </div>
+        <button onclick="submitQuizA()">Submit Answers</button>
+    </div>
+
+    <div id="break-screen" class="container hidden">
+        <h1>Great Job!</h1>
+        <p>Take a deep breath and rest your eyes.</p>
+        <p>In the next part, the screen will turn dark.</p>
+        <button onclick="startPartTwo()">Ready for Part 2</button>
+    </div>
+
+    <div id="story-b-screen" class="container hidden">
+        <h2>Story 2: The Space Lunch</h2>
+        <p>Astronaut Leo was very hungry. Being in zero gravity made doing simple things very hard. He opened his lunch bag and pulled out a peanut butter sandwich. "Finally," he said.</p>
+        <p>Suddenly, the ship bumped into a tiny rock. The sandwich floated out of Leo's hand! It spun slowly in the air, drifting toward the control panel. "Don't touch the buttons!" Leo yelled at the sandwich.</p>
+        <p>Leo pushed off the wall and floated across the room. He grabbed his butterfly net, which he used for science experiments. Swish! He caught the sandwich just before it hit the red emergency button. Leo sighed with relief and took a big bite.</p>
+        <button onclick="finishStoryB()">I'm Finished Reading</button>
+    </div>
+
+    <div id="quiz-b-screen" class="container hidden">
+        <h2>Quiz 2</h2>
+        <div class="question"><p>1. What was Leo trying to eat?</p>
+            <label><input type="radio" name="q4" value="pizza"> Pizza</label>
+            <label><input type="radio" name="q4" value="sandwich"> A sandwich</label>
+            <label><input type="radio" name="q4" value="apple"> An apple</label>
+        </div>
+        <div class="question"><p>2. Why did the food float away?</p>
+            <label><input type="radio" name="q5" value="wind"> The wind blew it</label>
+            <label><input type="radio" name="q5" value="bump"> The ship bumped a rock</label>
+            <label><input type="radio" name="q5" value="drop"> He dropped it</label>
+        </div>
+        <div class="question"><p>3. What did he use to catch it?</p>
+            <label><input type="radio" name="q6" value="net"> A butterfly net</label>
+            <label><input type="radio" name="q6" value="hands"> His bare hands</label>
+            <label><input type="radio" name="q6" value="bag"> A paper bag</label>
+        </div>
+        <button onclick="submitQuizB()">Submit Answers</button>
+    </div>
+
+    <!-- Screen 7: Results -->
+    <div id="results-screen" class="container hidden">
+        <h1>Success!</h1>
+        <p>Your data has been saved securely.</p>
+        <div id="individual-result-summary" style="background: #eee; padding: 15px; border-radius: 8px; color: black; margin-bottom: 15px; font-size: 0.9rem;"></div>
+        <button onclick="location.reload()">Reset for Next Volunteer</button>
+    </div>
+
+    <!-- Screen 8: Dashboard -->
+    <div id="dashboard-screen" class="container hidden" style="max-width: 900px;">
+        <h1>Project Data Dashboard</h1>
+        <p>Total Tests Saved: <span id="total-count">0</span></p>
+        <div id="dashboard-content" style="overflow-x: auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date & Time</th>
+                        <th>User ID</th>
+                        <th>Room</th>
+                        <th>Light Mode</th>
+                        <th>Dark Mode</th>
+                    </tr>
+                </thead>
+                <tbody id="data-rows"></tbody>
+            </table>
+        </div>
+        <button onclick="location.reload()">Back to Start</button>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'science-project-4th';
+
+        let user = null;
+        let startTime, endTime;
+        let timeA = 0, timeB = 0, scoreA = 0, scoreB = 0, roomLight = "";
+
+        // Sign in
+        const initAuth = async () => {
+            try {
+                await signInAnonymously(auth);
+            } catch (e) { console.error("Auth failed", e); }
+        };
+        initAuth();
+        onAuthStateChanged(auth, (u) => { user = u; });
+
+        window.checkSurveyAndStart = () => {
+            const selected = document.querySelector('input[name="room-light"]:checked');
+            if (selected) {
+                roomLight = selected.value;
+                document.getElementById('intro-screen').classList.add('hidden');
+                document.getElementById('story-a-screen').classList.remove('hidden');
+                startTime = Date.now();
+            } else {
+                document.getElementById('survey-error').style.display = 'block';
+            }
+        };
+
+        window.finishStoryA = () => {
+            timeA = ((Date.now() - startTime) / 1000).toFixed(2);
+            showScreen('quiz-a-screen');
+        };
+
+        window.submitQuizA = () => {
+            scoreA = calculateScore({ q1: 'key', q2: 'flower', q3: 'crow' }, ['q1', 'q2', 'q3']);
+            showScreen('break-screen');
+        };
+
+        window.startPartTwo = () => {
+            document.body.classList.replace('light-mode-bg', 'dark-mode-bg');
+            showScreen('story-b-screen');
+            startTime = Date.now();
+        };
+
+        window.finishStoryB = () => {
+            timeB = ((Date.now() - startTime) / 1000).toFixed(2);
+            showScreen('quiz-b-screen');
+        };
+
+        window.submitQuizB = async () => {
+            scoreB = calculateScore({ q4: 'sandwich', q5: 'bump', q6: 'net' }, ['q4', 'q5', 'q6']);
+            await saveData();
+        };
+
+        async function saveData() {
+            if (!user) {
+                alert("Please wait for connection...");
+                return;
+            }
+            document.getElementById('loading-overlay').classList.remove('hidden');
+            
+            try {
+                // We record Timestamp (Date/Time) and the User ID
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'results'), {
+                    roomLight,
+                    timeA: parseFloat(timeA),
+                    scoreA,
+                    timeB: parseFloat(timeB),
+                    scoreB,
+                    userId: user.uid,
+                    timestamp: Timestamp.now()
+                });
+                
+                showIndividualSummary();
+                showScreen('results-screen');
+                document.body.classList.replace('dark-mode-bg', 'light-mode-bg');
+            } catch (e) {
+                console.error("Save error", e);
+                alert("Error saving. Please check connection.");
+            } finally {
+                document.getElementById('loading-overlay').classList.add('hidden');
+            }
+        }
+
+        window.showDashboard = async () => {
+            if (!user) return;
+            showScreen('dashboard-screen');
+            const tableBody = document.getElementById('data-rows');
+            tableBody.innerHTML = "<tr><td colspan='5'>Syncing spreadsheet...</td></tr>";
+            
+            try {
+                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'results'));
+                const querySnapshot = await getDocs(q);
+                tableBody.innerHTML = "";
+                document.getElementById('total-count').innerText = querySnapshot.size;
+                
+                // We will sort them in memory by the timestamp
+                const docs = [];
+                querySnapshot.forEach(doc => docs.push(doc.data()));
+                docs.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
+
+                docs.forEach((data) => {
+                    const dateObj = data.timestamp.toDate();
+                    const dateStr = dateObj.toLocaleDateString() + " " + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    
+                    const row = `<tr>
+                        <td>${dateStr}</td>
+                        <td><span class="id-badge">${data.userId.substring(0, 6)}...</span></td>
+                        <td>${data.roomLight}</td>
+                        <td>${data.timeA}s (${data.scoreA}/3)</td>
+                        <td>${data.timeB}s (${data.scoreB}/3)</td>
+                    </tr>`;
+                    tableBody.innerHTML += row;
+                });
+                
+                if (querySnapshot.empty) {
+                    tableBody.innerHTML = "<tr><td colspan='5'>No results yet! Start testing!</td></tr>";
+                }
+            } catch (e) {
+                console.error("Fetch error", e);
+                tableBody.innerHTML = "<tr><td colspan='5'>Error loading data.</td></tr>";
+            }
+        };
+
+        function showIndividualSummary() {
+            const summary = `
+                <strong>Session Info:</strong><br>
+                Date: ${new Date().toLocaleString()}<br>
+                User ID: ${user.uid.substring(0, 8)}...<br><br>
+                <strong>Stats:</strong><br>
+                Light Mode: ${timeA}s | Dark Mode: ${timeB}s
+            `;
+            document.getElementById('individual-result-summary').innerHTML = summary;
+        }
+
+        function calculateScore(keys, names) {
+            let s = 0;
+            names.forEach(n => {
+                const sel = document.querySelector(`input[name="${n}"]:checked`);
+                if (sel && sel.value === keys[n]) s++;
+            });
+            return s;
+        }
+
+        function showScreen(id) {
+            document.querySelectorAll('.container').forEach(el => el.classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
