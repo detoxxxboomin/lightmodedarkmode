@@ -99,7 +99,7 @@
         <p id="survey-error" style="color: red; display: none; margin-top: 10px;">Please pick a room lighting option!</p>
     </div>
 
-    <!-- Story/Quiz Screens -->
+    <!-- Screen 2: Story A (Light Mode) -->
     <div id="story-a-screen" class="container hidden">
         <h2>Story 1: The Lost Key</h2>
         <p>Sammy was playing in the backyard when he realized his pocket felt light. He tapped his jeans. Empty! The shiny silver key to the garden shed was gone. "Oh no," Sammy whispered. His dad needed that key to get the lawnmower.</p>
@@ -108,6 +108,7 @@
         <button onclick="finishStoryA()">I'm Finished Reading</button>
     </div>
 
+    <!-- Screen 3: Quiz A (Light Mode) -->
     <div id="quiz-a-screen" class="container hidden">
         <h2>Quiz 1</h2>
         <div class="question"><p>1. What did Sammy lose?</p>
@@ -128,6 +129,7 @@
         <button onclick="submitQuizA()">Submit Answers</button>
     </div>
 
+    <!-- Screen 4: Break -->
     <div id="break-screen" class="container hidden">
         <h1>Great Job!</h1>
         <p>Take a deep breath and rest your eyes.</p>
@@ -135,6 +137,7 @@
         <button onclick="startPartTwo()">Ready for Part 2</button>
     </div>
 
+    <!-- Screen 5: Story B (Dark Mode) -->
     <div id="story-b-screen" class="container hidden">
         <h2>Story 2: The Space Lunch</h2>
         <p>Astronaut Leo was very hungry. Being in zero gravity made doing simple things very hard. He opened his lunch bag and pulled out a peanut butter sandwich. "Finally," he said.</p>
@@ -143,6 +146,7 @@
         <button onclick="finishStoryB()">I'm Finished Reading</button>
     </div>
 
+    <!-- Screen 6: Quiz B (Dark Mode) -->
     <div id="quiz-b-screen" class="container hidden">
         <h2>Quiz 2</h2>
         <div class="question"><p>1. What was Leo trying to eat?</p>
@@ -163,7 +167,7 @@
         <button onclick="submitQuizB()">Submit Answers</button>
     </div>
 
-    <!-- Screen 7: Results -->
+    <!-- Screen 7: Results Summary -->
     <div id="results-screen" class="container hidden">
         <h1>Success!</h1>
         <p>Your data has been saved securely.</p>
@@ -197,31 +201,35 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        const firebaseConfig = JSON.parse(__firebase_config);
+        // TODO: REPLACE THE SECTION BELOW WITH YOUR FIREBASE CONFIG FROM STEP 2
+        const firebaseConfig = {
+            apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
+            authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
+            projectId: "lightmodedarkmode-d6305",
+            storageBucket: "lightmodedarkmode-d6305.firebasestorage.app",
+            messagingSenderId: "394258467768",
+            appId: "1:394258467768:web:ee7b55eeaeec0fbf53dd4d"
+        };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'science-project-4th';
+        const appId = "my-fourth-grade-science-project";
 
         let user = null;
         let startTime, endTime;
         let timeA = 0, timeB = 0, scoreA = 0, scoreB = 0, roomLight = "";
 
-        // Sign in
-        const initAuth = async () => {
-            try {
-                await signInAnonymously(auth);
-            } catch (e) { console.error("Auth failed", e); }
-        };
-        initAuth();
+        // Sign in Anonymously
+        signInAnonymously(auth).catch(e => console.error("Auth failed", e));
         onAuthStateChanged(auth, (u) => { user = u; });
 
+        // Global functions for buttons
         window.checkSurveyAndStart = () => {
             const selected = document.querySelector('input[name="room-light"]:checked');
             if (selected) {
                 roomLight = selected.value;
-                document.getElementById('intro-screen').classList.add('hidden');
-                document.getElementById('story-a-screen').classList.remove('hidden');
+                showScreen('story-a-screen');
                 startTime = Date.now();
             } else {
                 document.getElementById('survey-error').style.display = 'block';
@@ -255,14 +263,10 @@
         };
 
         async function saveData() {
-            if (!user) {
-                alert("Please wait for connection...");
-                return;
-            }
+            if (!user) return alert("Connecting to cloud... try again in 2 seconds.");
             document.getElementById('loading-overlay').classList.remove('hidden');
             
             try {
-                // We record Timestamp (Date/Time) and the User ID
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'results'), {
                     roomLight,
                     timeA: parseFloat(timeA),
@@ -278,7 +282,7 @@
                 document.body.classList.replace('dark-mode-bg', 'light-mode-bg');
             } catch (e) {
                 console.error("Save error", e);
-                alert("Error saving. Please check connection.");
+                alert("Error saving data.");
             } finally {
                 document.getElementById('loading-overlay').classList.add('hidden');
             }
@@ -288,7 +292,7 @@
             if (!user) return;
             showScreen('dashboard-screen');
             const tableBody = document.getElementById('data-rows');
-            tableBody.innerHTML = "<tr><td colspan='5'>Syncing spreadsheet...</td></tr>";
+            tableBody.innerHTML = "<tr><td colspan='5'>Loading...</td></tr>";
             
             try {
                 const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'results'));
@@ -296,7 +300,6 @@
                 tableBody.innerHTML = "";
                 document.getElementById('total-count').innerText = querySnapshot.size;
                 
-                // We will sort them in memory by the timestamp
                 const docs = [];
                 querySnapshot.forEach(doc => docs.push(doc.data()));
                 docs.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
@@ -314,22 +317,15 @@
                     </tr>`;
                     tableBody.innerHTML += row;
                 });
-                
-                if (querySnapshot.empty) {
-                    tableBody.innerHTML = "<tr><td colspan='5'>No results yet! Start testing!</td></tr>";
-                }
             } catch (e) {
-                console.error("Fetch error", e);
-                tableBody.innerHTML = "<tr><td colspan='5'>Error loading data.</td></tr>";
+                tableBody.innerHTML = "<tr><td colspan='5'>Error loading results.</td></tr>";
             }
         };
 
         function showIndividualSummary() {
             const summary = `
-                <strong>Session Info:</strong><br>
-                Date: ${new Date().toLocaleString()}<br>
-                User ID: ${user.uid.substring(0, 8)}...<br><br>
-                <strong>Stats:</strong><br>
+                <strong>Session Saved!</strong><br>
+                User ID: ${user.uid.substring(0, 8)}...<br>
                 Light Mode: ${timeA}s | Dark Mode: ${timeB}s
             `;
             document.getElementById('individual-result-summary').innerHTML = summary;
