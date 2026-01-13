@@ -50,6 +50,7 @@
 
         button:disabled { background-color: #ccc; cursor: not-allowed; }
         button.secondary { background-color: #2196F3; }
+        button.warning { background-color: #f44336; margin-top: 10px; font-size: 0.8rem; }
         button:hover:not(:disabled) { opacity: 0.9; }
 
         .hidden { display: none; }
@@ -63,7 +64,7 @@
         
         #loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255,255,255,0.95); display: flex; justify-content: center;
+            background: rgba(255,255,255,1); display: flex; justify-content: center;
             align-items: center; z-index: 1000; font-weight: bold; color: black;
             flex-direction: column; text-align: center; padding: 20px;
         }
@@ -72,33 +73,47 @@
         .status-dot { height: 10px; width: 200px; background: #ccc; border-radius: 5px; margin-top: 15px; overflow: hidden; }
         .status-progress { height: 100%; width: 0%; background: #4CAF50; transition: width 0.3s; }
         
-        #debug-info { margin-top: 20px; font-family: monospace; font-size: 0.7rem; color: #666; max-width: 400px; }
+        #debug-info { 
+            margin-top: 30px; 
+            font-family: monospace; 
+            font-size: 0.8rem; 
+            color: #333; 
+            max-width: 500px; 
+            background: #f0f0f0; 
+            padding: 20px; 
+            border-radius: 8px; 
+            border: 2px dashed #ccc;
+        }
     </style>
 </head>
 <body class="light-mode-bg">
 
-    <div id="loading-overlay" class="hidden">
-        <div id="loading-text">Connecting to Cloud...</div>
+    <!-- Loading Overlay (Visible by default until Auth succeeds) -->
+    <div id="loading-overlay">
+        <div id="loading-text" style="font-size: 1.5rem;">Connecting to Cloud...</div>
         <div class="status-dot"><div id="status-progress" class="status-progress"></div></div>
-        <div id="debug-info" class="hidden">
-            <p style="color:red; font-weight:bold;">Still waiting? Possible fixes:</p>
-            <ol style="text-align:left;">
-                <li>Enable <b>Anonymous Auth</b> in Firebase Console.</li>
-                <li>Ensure <b>Cloud Firestore</b> is "Created" in your project.</li>
-                <li>Check your Firestore <b>Rules</b> are set to "allow read, write".</li>
-            </ol>
-            <div id="error-log" style="background:#ddd; padding:5px; border-radius:3px;">No errors yet...</div>
+        
+        <div id="debug-info">
+            <p style="color:#d32f2f; font-weight:bold; font-size: 1rem;">Connection Troubleshooter</p>
+            <div id="error-log" style="background:#fff; padding:10px; border-radius:5px; margin: 10px 0; border: 1px solid #ddd; min-height: 40px; color: #d32f2f;">
+                Waiting for response from Google...
+            </div>
+            <p style="text-align:left; margin-bottom: 5px;"><strong>Common Fixes:</strong></p>
+            <ul style="text-align:left; margin-top: 0;">
+                <li>Check if "Anonymous" is ON in Firebase Auth tab.</li>
+                <li>Make sure you created the "Firestore" database.</li>
+                <li>Check that Rules allow "read, write: if true".</li>
+            </ul>
+            <button class="warning" id="bypass-btn" onclick="bypassCloud()" style="display:none;">⚠️ Use Without Cloud (Save Locally Only)</button>
         </div>
     </div>
 
     <!-- Screen 1: Intro -->
-    <div id="intro-screen" class="container">
+    <div id="intro-screen" class="container hidden">
         <h1>Science Project: Light vs. Dark</h1>
         
         <div id="setup-warning" class="error-banner hidden">
-            <strong>Critical Connection Error:</strong> <span id="error-msg">Check your Firebase settings.</span>
-            <br><br>
-            Make sure <strong>Anonymous Authentication</strong> is enabled!
+            <strong>Database Error:</strong> <span id="error-msg">Check your Firebase settings.</span>
         </div>
 
         <p>Help me find out if screen colors change how we read!</p>
@@ -111,7 +126,7 @@
         </div>
 
         <button id="start-btn" onclick="checkSurveyAndStart()">Start Test</button>
-        <button class="secondary" onclick="showDashboard()">📊 View Results Spreadsheet</button>
+        <button class="secondary" id="dash-btn" onclick="showDashboard()">📊 View Results Spreadsheet</button>
         <p id="survey-error" style="color: red; display: none;">Please pick an option!</p>
     </div>
 
@@ -200,40 +215,52 @@
 
         let app, auth, db, resultsRef;
         let currentUser = null;
+        let isBypassed = false;
 
-        // Diagnostic helper
         const logError = (err) => {
             const el = document.getElementById('error-log');
             if(el) el.innerText = err;
-            document.getElementById('setup-warning').classList.remove('hidden');
-            document.getElementById('error-msg').innerText = err;
+            console.error("Firebase Error:", err);
         };
 
+        // Initialize Firebase
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
             resultsRef = collection(db, 'experiment_results');
+
+            signInAnonymously(auth).then(cred => {
+                currentUser = cred.user;
+                document.getElementById('status-progress').style.width = "100%";
+                document.getElementById('loading-overlay').classList.add('hidden');
+                document.getElementById('intro-screen').classList.remove('hidden');
+            }).catch(e => {
+                logError(e.code + ": " + e.message);
+                if(e.code === "auth/operation-not-allowed") {
+                    logError("CRITICAL: You must enable 'Anonymous' sign-in in the Firebase Console!");
+                }
+            });
         } catch (e) {
-            logError("Init Error: " + e.message);
+            logError("Initialization Failed: " + e.message);
         }
 
-        // Auto-show Troubleshooter after 5 seconds if not connected
+        // Show Bypass Button after 8 seconds
         setTimeout(() => {
             if (!currentUser) {
-                document.getElementById('debug-info').classList.remove('hidden');
+                document.getElementById('bypass-btn').style.display = 'block';
+                document.getElementById('loading-text').innerText = "Connection Taking Too Long...";
             }
-        }, 5000);
+        }, 8000);
 
-        signInAnonymously(auth).then(cred => {
-            currentUser = cred.user;
-            document.getElementById('status-progress').style.width = "100%";
-            console.log("Connected as:", currentUser.uid);
-        }).catch(e => {
-            logError("Auth Error: " + e.message);
-        });
-
-        onAuthStateChanged(auth, u => { currentUser = u; });
+        window.bypassCloud = () => {
+            isBypassed = true;
+            document.getElementById('loading-overlay').classList.add('hidden');
+            document.getElementById('intro-screen').classList.remove('hidden');
+            document.getElementById('setup-warning').classList.remove('hidden');
+            document.getElementById('error-msg').innerText = "Running in Local Mode (Offline). Data will not be saved to the cloud.";
+            document.getElementById('dash-btn').disabled = true;
+        };
 
         // App Logic
         window.startTime = 0;
@@ -287,16 +314,12 @@
             if(document.querySelector('input[name="q4"]:checked')?.value === 'sandwich') window.scoreB++;
             if(document.querySelector('input[name="q6"]:checked')?.value === 'net') window.scoreB++;
             
-            if(!currentUser) {
-                alert("Database not connected. Please check the home screen for errors.");
+            if(isBypassed) {
+                document.getElementById('personal-summary').innerHTML = `Local Mode: Light: ${window.timeA}s | Dark: ${window.timeB}s`;
+                showScreen('results-screen');
                 return;
             }
 
-            const overlay = document.getElementById('loading-overlay');
-            const progress = document.getElementById('status-progress');
-            overlay.classList.remove('hidden');
-            progress.style.width = "40%";
-            
             try {
                 await addDoc(resultsRef, {
                     roomLight: window.roomLight, 
@@ -304,37 +327,27 @@
                     scoreA: window.scoreA, 
                     timeB: parseFloat(window.timeB), 
                     scoreB: window.scoreB,
-                    userId: currentUser.uid,
+                    userId: currentUser?.uid || "unknown",
                     timestamp: Timestamp.now()
                 });
                 
-                progress.style.width = "100%";
                 document.getElementById('personal-summary').innerHTML = `Success! Light: ${window.timeA}s | Dark: ${window.timeB}s`;
                 showScreen('results-screen');
                 document.body.classList.replace('dark-mode-bg', 'light-mode-bg');
             } catch (e) {
-                logError("Save Error: " + e.message);
-                alert("Save Failed: " + e.message);
-            } finally {
-                setTimeout(() => overlay.classList.add('hidden'), 500);
+                alert("Cloud Save Failed: " + e.message);
             }
         };
 
         window.showDashboard = async () => {
-            if(!currentUser) {
-                alert("Database not connected.");
-                return;
-            }
             showScreen('dashboard-screen');
             const tbody = document.getElementById('data-rows');
             tbody.innerHTML = "<tr><td colspan='5'>Loading spreadsheet...</td></tr>";
             try {
                 const snap = await getDocs(query(resultsRef));
                 tbody.innerHTML = "";
-                
                 const items = [];
                 snap.forEach(doc => items.push(doc.data()));
-                
                 items.sort((a,b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
 
                 items.forEach(d => {
@@ -347,9 +360,8 @@
                         <td>${d.timeB}s (${d.scoreB}/2)</td>
                     </tr>`;
                 });
-                if (items.length === 0) tbody.innerHTML = "<tr><td colspan='5'>No results yet.</td></tr>";
+                if (items.length === 0) tbody.innerHTML = "<tr><td colspan='5'>No results found.</td></tr>";
             } catch (e) { 
-                logError("Load Error: " + e.message);
                 tbody.innerHTML = `<tr><td colspan='5' style="color:red">Error: ${e.message}</td></tr>`;
             }
         };
