@@ -50,7 +50,7 @@
 
         button:disabled { background-color: #ccc; cursor: not-allowed; }
         button.secondary { background-color: #2196F3; }
-        button.warning { background-color: #f44336; margin-top: 10px; font-size: 0.8rem; }
+        button.warning { background-color: #ff9800; font-size: 0.8rem; }
         button:hover:not(:disabled) { opacity: 0.9; }
 
         .hidden { display: none; }
@@ -69,20 +69,13 @@
             flex-direction: column; text-align: center; padding: 20px;
         }
 
-        .error-banner { background: #fee2e2; color: #991b1b; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #f87171; font-size: 0.9rem; }
-        .status-dot { height: 10px; width: 200px; background: #ccc; border-radius: 5px; margin-top: 15px; overflow: hidden; }
-        .status-progress { height: 100%; width: 0%; background: #4CAF50; transition: width 0.3s; }
-        
-        #debug-info { 
-            margin-top: 30px; 
-            font-family: monospace; 
-            font-size: 0.8rem; 
-            color: #333; 
-            max-width: 500px; 
-            background: #f0f0f0; 
-            padding: 20px; 
-            border-radius: 8px; 
-            border: 2px dashed #ccc;
+        .error-hint {
+            margin-top: 20px;
+            font-weight: normal;
+            font-size: 0.85rem;
+            color: #666;
+            max-width: 400px;
+            line-height: 1.4;
         }
     </style>
 </head>
@@ -90,36 +83,25 @@
 
     <!-- Loading Overlay -->
     <div id="loading-overlay">
-        <div id="loading-text" style="font-size: 1.5rem;">Connecting to Cloud...</div>
-        <div class="status-dot"><div id="status-progress" class="status-progress"></div></div>
+        <div id="loading-status" style="font-size: 1.4rem; margin-bottom: 10px;">Connecting to Google Cloud...</div>
+        <div id="connection-timer" style="font-weight: normal; color: #666; font-size: 0.9rem;">Checking credentials...</div>
         
-        <div id="debug-info">
-            <p style="color:#d32f2f; font-weight:bold; font-size: 1rem;">Connection Troubleshooter</p>
-            <div id="error-log" style="background:#fff; padding:10px; border-radius:5px; margin: 10px 0; border: 1px solid #ddd; min-height: 40px; color: #d32f2f;">
-                Waiting for response from Google...
-            </div>
-            
-            <button class="secondary" style="margin-top:0; font-size:0.8rem; padding: 8px;" onclick="location.reload()">🔄 Retry Connection</button>
-            
-            <p style="text-align:left; margin-top: 15px; margin-bottom: 5px;"><strong>Check these in Firebase:</strong></p>
-            <ul style="text-align:left; margin-top: 0; font-size: 0.75rem;">
-                <li><strong>Build > Authentication > Sign-in Method:</strong> Enable "Anonymous".</li>
-                <li><strong>Build > Firestore Database > Rules:</strong> Set to "allow read, write: if true;".</li>
-            </ul>
-            <button class="warning" id="bypass-btn" onclick="bypassCloud()" style="display:none;">⚠️ Use Without Cloud (Save Locally Only)</button>
+        <div id="connection-help" class="hidden">
+            <p class="error-hint">If this takes too long, your project configuration might be missing or incorrect in the code.</p>
+            <button class="secondary" onclick="location.reload()">🔄 Try Again</button>
+            <button class="warning" onclick="bypassConnection()">⚠️ Run in Offline Mode (Testing Only)</button>
         </div>
     </div>
 
     <!-- Screen 1: Intro -->
     <div id="intro-screen" class="container hidden">
         <h1>Science Project: Light vs. Dark</h1>
-        
-        <div id="setup-warning" class="error-banner hidden">
-            <strong>Database Error:</strong> <span id="error-msg">Check your Firebase settings.</span>
-        </div>
-
         <p>Help me find out if screen colors change how we read!</p>
         
+        <div id="offline-notice" class="hidden" style="background: #fff3cd; color: #856404; padding: 10px; border-radius: 5px; margin-bottom: 15px; font-size: 0.8rem; border: 1px solid #ffeeba;">
+            <strong>Offline Mode:</strong> Data will NOT be saved to the cloud.
+        </div>
+
         <div class="survey-box">
             <p><strong>Environment Check:</strong></p>
             <p>What is the lighting like in your room?</p>
@@ -132,7 +114,7 @@
         <p id="survey-error" style="color: red; display: none;">Please pick an option!</p>
     </div>
 
-    <!-- Story/Quiz Screens remain same for consistency -->
+    <!-- Story/Quiz Screens -->
     <div id="story-a-screen" class="container hidden">
         <h2>Story 1: The Lost Key</h2>
         <p>Sammy was playing in the backyard when he realized his pocket felt light. He tapped his jeans. Empty! The shiny silver key to the garden shed was gone. "Oh no," Sammy whispered. His dad needed that key to get the lawnmower.</p>
@@ -184,7 +166,7 @@
     <div id="results-screen" class="container hidden">
         <h1>Data Sent!</h1>
         <p>Thank you for helping with my science project.</p>
-        <div id="personal-summary" style="background: #eee; padding: 10px; color: black; border-radius: 5px;"></div>
+        <div id="personal-summary" style="background: #eee; padding: 15px; color: black; border-radius: 5px; margin-bottom: 10px;"></div>
         <button onclick="location.reload()">Next Volunteer</button>
     </div>
 
@@ -203,69 +185,74 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
-        // Current Config
-        const firebaseConfig = {
-            apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
-            authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
-            projectId: "lightmodedarkmode-d6305",
-            storageBucket: "lightmodedarkmode-d6305.appspot.com",
-            messagingSenderId: "394258467768",
-            appId: "1:394258467768:web:ee7b55eeaeec0fbf53dd4d"
-        };
+        // CONFIG: Using provided environment variables or fallback to your hardcoded one
+        const firebaseConfig = (typeof __firebase_config !== 'undefined') 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
+                authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
+                projectId: "lightmodedarkmode-d6305",
+                storageBucket: "lightmodedarkmode-d6305.appspot.com",
+                messagingSenderId: "394258467768",
+                appId: "1:394258467768:web:ee7b55eeaeec0fbf53dd4d"
+            };
 
         let app, auth, db, resultsRef;
         let currentUser = null;
-        let isBypassed = false;
+        let isOffline = false;
 
-        const logError = (err) => {
-            const el = document.getElementById('error-log');
-            if(el) el.innerText = err;
-        };
+        // Connection Timer for UX
+        let seconds = 0;
+        const timerInterval = setInterval(() => {
+            seconds++;
+            const timerEl = document.getElementById('connection-timer');
+            if (timerEl) timerEl.innerText = `Attempting connection... (${seconds}s)`;
+            if (seconds > 8) {
+                document.getElementById('connection-help').classList.remove('hidden');
+                document.getElementById('loading-status').innerText = "Connection taking longer than usual...";
+            }
+        }, 1000);
 
         async function initFirebase() {
             try {
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
-                resultsRef = collection(db, 'experiment_results');
-
-                const cred = await signInAnonymously(auth);
-                currentUser = cred.user;
                 
-                // Success!
-                document.getElementById('status-progress').style.width = "100%";
-                document.getElementById('loading-overlay').classList.add('hidden');
-                document.getElementById('intro-screen').classList.remove('hidden');
+                // CRITICAL RULE 1: Standardized Path
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'project-reading-test';
+                resultsRef = collection(db, 'artifacts', appId, 'public', 'data', 'results');
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUser = user;
+                        clearInterval(timerInterval);
+                        document.getElementById('loading-overlay').classList.add('hidden');
+                        document.getElementById('intro-screen').classList.remove('hidden');
+                    }
+                });
+
+                await signInAnonymously(auth);
             } catch (e) {
-                console.error(e);
-                if (e.code === 'auth/operation-not-allowed') {
-                    logError("Fix Needed: Go to Authentication -> Sign-in Method and enable 'Anonymous'.");
-                } else {
-                    logError(e.message || "Unknown error connecting to Google.");
-                }
+                console.error("Firebase Error:", e);
+                document.getElementById('loading-status').innerText = "Connection Failed";
+                document.getElementById('connection-timer').innerText = e.message;
+                document.getElementById('connection-help').classList.remove('hidden');
             }
         }
 
-        // Start Initial Connection
         initFirebase();
 
-        // Show Bypass Button after 10 seconds
-        setTimeout(() => {
-            if (!currentUser) {
-                document.getElementById('bypass-btn').style.display = 'block';
-                document.getElementById('loading-text').innerText = "Network Delay Detected";
-            }
-        }, 10000);
-
-        window.bypassCloud = () => {
-            isBypassed = true;
+        window.bypassConnection = () => {
+            isOffline = true;
+            clearInterval(timerInterval);
             document.getElementById('loading-overlay').classList.add('hidden');
             document.getElementById('intro-screen').classList.remove('hidden');
-            document.getElementById('setup-warning').classList.remove('hidden');
-            document.getElementById('error-msg').innerText = "Local Mode Active. Data will only stay on this screen.";
+            document.getElementById('offline-notice').classList.remove('hidden');
+            document.getElementById('dash-btn').disabled = true;
         };
 
         // Logic functions
@@ -320,8 +307,12 @@
             if(document.querySelector('input[name="q4"]:checked')?.value === 'sandwich') window.scoreB++;
             if(document.querySelector('input[name="q6"]:checked')?.value === 'net') window.scoreB++;
             
-            if(isBypassed) {
-                document.getElementById('personal-summary').innerHTML = `Local Only: L: ${window.timeA}s | D: ${window.timeB}s`;
+            if(isOffline) {
+                document.getElementById('personal-summary').innerHTML = `
+                    <strong>OFFLINE RESULTS:</strong><br>
+                    Light: ${window.timeA}s | Dark: ${window.timeB}s<br>
+                    <em>Note: This data was not saved to cloud.</em>
+                `;
                 showScreen('results-screen');
                 return;
             }
@@ -336,10 +327,15 @@
                     userId: currentUser.uid,
                     timestamp: Timestamp.now()
                 });
-                document.getElementById('personal-summary').innerHTML = `Saved! Light: ${window.timeA}s | Dark: ${window.timeB}s`;
+                document.getElementById('personal-summary').innerHTML = `
+                    <strong>Saved to Cloud!</strong><br>
+                    Light Mode: ${window.timeA}s<br>
+                    Dark Mode: ${window.timeB}s
+                `;
                 showScreen('results-screen');
+                document.body.classList.replace('dark-mode-bg', 'light-mode-bg');
             } catch (e) {
-                alert("Cloud save failed. Use local mode next time!");
+                alert("Error saving: " + e.message);
             }
         };
 
@@ -354,13 +350,13 @@
                     const d = doc.data();
                     tbody.innerHTML += `<tr>
                         <td>${d.timestamp?.toDate().toLocaleTimeString() || '--'}</td>
-                        <td>${d.userId.substring(0,5)}</td>
+                        <td>${d.userId.substring(0,5)}...</td>
                         <td>${d.roomLight}</td>
                         <td>${d.timeA}s</td>
                         <td>${d.timeB}s</td>
                     </tr>`;
                 });
-            } catch (e) { tbody.innerHTML = "Error loading data."; }
+            } catch (e) { tbody.innerHTML = "Error loading data: " + e.message; }
         };
     </script>
 </body>
