@@ -79,10 +79,8 @@
     <div id="intro-screen" class="container">
         <h1>Science Project: Light vs. Dark</h1>
         
-        <!-- Setup Warning for User -->
         <div id="setup-warning" class="error-banner hidden">
-            <strong>Action Needed:</strong> Your Firebase API Key is missing or invalid. 
-            Please open the code and paste your actual Firebase credentials into the <code>firebaseConfig</code> section.
+            <strong>Connection Error:</strong> Check your internet or Firebase Authorized Domains.
         </div>
 
         <p>Help me find out if screen colors change how we read!</p>
@@ -173,51 +171,37 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
-        /** * STEP 1: Replace the placeholders below with your actual Firebase config.
-         * You can find this in your Firebase Console: Project Settings > General > Your Apps.
-         */
+        // Updated with your API key
         const firebaseConfig = {
             apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
-            authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
-            projectId: "lightmodedarkmode-d6305",
-            storageBucket: "lightmodedarkmode-d6305.firebasestorage.app",
-            messagingSenderId: "394258467768",
-            appId: "1:394258467768:web:ee7b55eeaeec0fbf53dd4d"
+            authDomain: "light-vs-dark-experiment.firebaseapp.com",
+            projectId: "light-vs-dark-experiment",
+            storageBucket: "light-vs-dark-experiment.appspot.com",
+            messagingSenderId: "123456789012",
+            appId: "1:123456789012:web:abcdef1234567890"
         };
 
-        // Safeguard check for placeholder values
-        const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc");
-
-        let app, auth, db;
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
         const collectionName = "experiment_results";
 
-        if (isConfigValid) {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-
-            signInAnonymously(auth).catch(e => {
-                console.error("Auth Error", e);
-                if (e.message.includes("api-key-not-valid")) {
-                    document.getElementById('setup-warning').classList.remove('hidden');
-                }
-            });
-
-            onAuthStateChanged(auth, u => { 
-                window.currentUser = u; 
-                console.log("Logged in as:", u?.uid);
-            });
-        } else {
-            // Show UI warning if user hasn't setup keys yet
-            document.getElementById('setup-warning').classList.remove('hidden');
-        }
-
+        let user = null;
         window.startTime = 0;
         window.timeA = 0;
         window.timeB = 0;
         window.scoreA = 0;
         window.scoreB = 0;
         window.roomLight = "";
+
+        signInAnonymously(auth).catch(e => {
+            console.error("Auth Error", e);
+            document.getElementById('setup-warning').classList.remove('hidden');
+        });
+
+        onAuthStateChanged(auth, u => { 
+            window.currentUser = u; 
+        });
 
         function showScreen(id) {
             document.querySelectorAll('.container').forEach(el => el.classList.add('hidden'));
@@ -263,8 +247,8 @@
             if(document.querySelector('input[name="q4"]:checked')?.value === 'sandwich') window.scoreB++;
             if(document.querySelector('input[name="q6"]:checked')?.value === 'net') window.scoreB++;
             
-            if(!isConfigValid || !window.currentUser) {
-                alert("The app is not connected to a database. Please check that you entered your Firebase API Key in the code.");
+            if(!window.currentUser) {
+                alert("The app is not connected to a database. Please check your internet connection.");
                 return;
             }
 
@@ -292,8 +276,8 @@
         };
 
         window.showDashboard = async () => {
-            if(!isConfigValid || !window.currentUser) {
-                alert("Database connection is not active. Setup your Firebase keys first.");
+            if(!window.currentUser) {
+                alert("Database connection is not active.");
                 return;
             }
             showScreen('dashboard-screen');
