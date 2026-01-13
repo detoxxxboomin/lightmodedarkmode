@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Light vs Dark Mode Experiment</title>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -28,11 +25,10 @@
             width: 95%;
         }
 
-        /* Light Mode Styles */
+        /* Mode Colors */
         .light-mode-bg { background-color: #ffffff; color: #000000; }
         .light-mode-bg .container { background-color: #f9f9f9; border: 1px solid #ddd; }
 
-        /* Dark Mode Styles */
         .dark-mode-bg { background-color: #121212; color: #ffffff; }
         .dark-mode-bg .container { background-color: #1e1e1e; border: 1px solid #333; }
 
@@ -52,8 +48,9 @@
             font-weight: bold;
         }
 
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
         button.secondary { background-color: #2196F3; }
-        button:hover { opacity: 0.9; }
+        button:hover:not(:disabled) { opacity: 0.9; }
 
         .hidden { display: none; }
         .survey-box { background: #eee; padding: 15px; border-radius: 8px; margin: 20px 0; color: black; }
@@ -70,36 +67,39 @@
             align-items: center; z-index: 1000; font-weight: bold; color: black;
         }
 
-        .id-badge {
-            font-family: monospace;
-            background: #ddd;
-            padding: 2px 5px;
-            border-radius: 3px;
-        }
+        .id-badge { font-family: monospace; background: #ddd; padding: 2px 5px; border-radius: 3px; }
+        .error-banner { background: #fee2e2; color: #991b1b; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #f87171; }
     </style>
 </head>
 <body class="light-mode-bg">
 
-    <div id="loading-overlay" class="hidden">Connecting to Database...</div>
+    <div id="loading-overlay" class="hidden">Connecting to Cloud...</div>
 
-    <!-- Screen 1: Introduction & Survey -->
+    <!-- Screen 1: Intro -->
     <div id="intro-screen" class="container">
         <h1>Science Project: Light vs. Dark</h1>
+        
+        <!-- Setup Warning for User -->
+        <div id="setup-warning" class="error-banner hidden">
+            <strong>Action Needed:</strong> Your Firebase API Key is missing or invalid. 
+            Please open the code and paste your actual Firebase credentials into the <code>firebaseConfig</code> section.
+        </div>
+
         <p>Help me find out if screen colors change how we read!</p>
         
         <div class="survey-box">
             <p><strong>Environment Check:</strong></p>
             <p>What is the lighting like in your room?</p>
-            <label><input type="radio" name="room-light" value="Bright"> Brightly Lit (Sunny/Overhead)</label>
-            <label><input type="radio" name="room-light" value="Dim"> Dimly Lit (Dark/Low Light)</label>
+            <label><input type="radio" name="room-light" value="Bright"> Brightly Lit</label>
+            <label><input type="radio" name="room-light" value="Dim"> Dimly Lit</label>
         </div>
 
-        <button onclick="checkSurveyAndStart()">Start Reading Test</button>
-        <button class="secondary" onclick="showDashboard()">📊 View Project Results (Spreadsheet)</button>
-        <p id="survey-error" style="color: red; display: none; margin-top: 10px;">Please pick a room lighting option!</p>
+        <button id="start-btn" onclick="checkSurveyAndStart()">Start Test</button>
+        <button class="secondary" onclick="showDashboard()">📊 View Results Spreadsheet</button>
+        <p id="survey-error" style="color: red; display: none;">Please pick an option!</p>
     </div>
 
-    <!-- Screen 2: Story A (Light Mode) -->
+    <!-- Experiment Screens -->
     <div id="story-a-screen" class="container hidden">
         <h2>Story 1: The Lost Key</h2>
         <p>Sammy was playing in the backyard when he realized his pocket felt light. He tapped his jeans. Empty! The shiny silver key to the garden shed was gone. "Oh no," Sammy whispered. His dad needed that key to get the lawnmower.</p>
@@ -108,36 +108,25 @@
         <button onclick="finishStoryA()">I'm Finished Reading</button>
     </div>
 
-    <!-- Screen 3: Quiz A (Light Mode) -->
     <div id="quiz-a-screen" class="container hidden">
         <h2>Quiz 1</h2>
         <div class="question"><p>1. What did Sammy lose?</p>
             <label><input type="radio" name="q1" value="coin"> A gold coin</label>
             <label><input type="radio" name="q1" value="key"> A silver key</label>
-            <label><input type="radio" name="q1" value="toy"> A toy car</label>
         </div>
-        <div class="question"><p>2. Where did he find it?</p>
-            <label><input type="radio" name="q2" value="sandbox"> In the sandbox</label>
-            <label><input type="radio" name="q2" value="flower"> Near the flower pots</label>
-            <label><input type="radio" name="q2" value="grass"> In the tall grass</label>
-        </div>
-        <div class="question"><p>3. What animal was near the item?</p>
+        <div class="question"><p>2. What animal was near it?</p>
             <label><input type="radio" name="q3" value="dog"> A dog</label>
             <label><input type="radio" name="q3" value="crow"> A crow</label>
-            <label><input type="radio" name="q3" value="cat"> A cat</label>
         </div>
-        <button onclick="submitQuizA()">Submit Answers</button>
+        <button onclick="submitQuizA()">Next</button>
     </div>
 
-    <!-- Screen 4: Break -->
     <div id="break-screen" class="container hidden">
         <h1>Great Job!</h1>
-        <p>Take a deep breath and rest your eyes.</p>
-        <p>In the next part, the screen will turn dark.</p>
+        <p>Rest your eyes. Part 2 will be in <strong>Dark Mode</strong>.</p>
         <button onclick="startPartTwo()">Ready for Part 2</button>
     </div>
 
-    <!-- Screen 5: Story B (Dark Mode) -->
     <div id="story-b-screen" class="container hidden">
         <h2>Story 2: The Space Lunch</h2>
         <p>Astronaut Leo was very hungry. Being in zero gravity made doing simple things very hard. He opened his lunch bag and pulled out a peanut butter sandwich. "Finally," he said.</p>
@@ -146,204 +135,192 @@
         <button onclick="finishStoryB()">I'm Finished Reading</button>
     </div>
 
-    <!-- Screen 6: Quiz B (Dark Mode) -->
     <div id="quiz-b-screen" class="container hidden">
         <h2>Quiz 2</h2>
         <div class="question"><p>1. What was Leo trying to eat?</p>
             <label><input type="radio" name="q4" value="pizza"> Pizza</label>
             <label><input type="radio" name="q4" value="sandwich"> A sandwich</label>
-            <label><input type="radio" name="q4" value="apple"> An apple</label>
         </div>
-        <div class="question"><p>2. Why did the food float away?</p>
-            <label><input type="radio" name="q5" value="wind"> The wind blew it</label>
-            <label><input type="radio" name="q5" value="bump"> The ship bumped a rock</label>
-            <label><input type="radio" name="q5" value="drop"> He dropped it</label>
-        </div>
-        <div class="question"><p>3. What did he use to catch it?</p>
+        <div class="question"><p>2. What did he use to catch it?</p>
             <label><input type="radio" name="q6" value="net"> A butterfly net</label>
-            <label><input type="radio" name="q6" value="hands"> His bare hands</label>
-            <label><input type="radio" name="q6" value="bag"> A paper bag</label>
+            <label><input type="radio" name="q6" value="hands"> His hands</label>
         </div>
-        <button onclick="submitQuizB()">Submit Answers</button>
+        <button onclick="submitQuizB()">Save My Data</button>
     </div>
 
-    <!-- Screen 7: Results Summary -->
     <div id="results-screen" class="container hidden">
-        <h1>Success!</h1>
-        <p>Your data has been saved securely.</p>
-        <div id="individual-result-summary" style="background: #eee; padding: 15px; border-radius: 8px; color: black; margin-bottom: 15px; font-size: 0.9rem;"></div>
-        <button onclick="location.reload()">Reset for Next Volunteer</button>
+        <h1>Data Sent!</h1>
+        <p>Thank you for helping with my science project.</p>
+        <div id="personal-summary" style="background: #eee; padding: 10px; color: black; border-radius: 5px;"></div>
+        <button onclick="location.reload()">Next Volunteer</button>
     </div>
 
-    <!-- Screen 8: Dashboard -->
     <div id="dashboard-screen" class="container hidden" style="max-width: 900px;">
-        <h1>Project Data Dashboard</h1>
-        <p>Total Tests Saved: <span id="total-count">0</span></p>
+        <h1>Project Dashboard</h1>
         <div id="dashboard-content" style="overflow-x: auto;">
             <table>
                 <thead>
-                    <tr>
-                        <th>Date & Time</th>
-                        <th>User ID</th>
-                        <th>Room</th>
-                        <th>Light Mode</th>
-                        <th>Dark Mode</th>
-                    </tr>
+                    <tr><th>Time</th><th>User ID</th><th>Room</th><th>Light Mode</th><th>Dark Mode</th></tr>
                 </thead>
                 <tbody id="data-rows"></tbody>
             </table>
         </div>
-        <button onclick="location.reload()">Back to Start</button>
+        <button onclick="location.reload()">Back</button>
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
-        // TODO: REPLACE THE SECTION BELOW WITH YOUR FIREBASE CONFIG FROM STEP 2
+        /** * STEP 1: Replace the placeholders below with your actual Firebase config.
+         * You can find this in your Firebase Console: Project Settings > General > Your Apps.
+         */
         const firebaseConfig = {
-  apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
-  authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
-  projectId: "lightmodedarkmode-d6305",
-  storageBucket: "lightmodedarkmode-d6305.firebasestorage.app",
-  messagingSenderId: "394258467768",
-  appId: "1:394258467768:web:ee7b55eeaeec0fbf53dd4d"
-};
+            apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
+            authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
+            projectId: "lightmodedarkmode-d6305",
+            storageBucket: "lightmodedarkmode-d6305.firebasestorage.app",
+            messagingSenderId: "394258467768",
+            appId: "1:394258467768:web:ee7b55eeaeec0fbf53dd4d"
+        };
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = "my-fourth-grade-science-project";
+        // Safeguard check for placeholder values
+        const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc");
 
-        let user = null;
-        let startTime, endTime;
-        let timeA = 0, timeB = 0, scoreA = 0, scoreB = 0, roomLight = "";
+        let app, auth, db;
+        const collectionName = "experiment_results";
 
-        // Sign in Anonymously
-        signInAnonymously(auth).catch(e => console.error("Auth failed", e));
-        onAuthStateChanged(auth, (u) => { user = u; });
+        if (isConfigValid) {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
 
-        // Global functions for buttons
+            signInAnonymously(auth).catch(e => {
+                console.error("Auth Error", e);
+                if (e.message.includes("api-key-not-valid")) {
+                    document.getElementById('setup-warning').classList.remove('hidden');
+                }
+            });
+
+            onAuthStateChanged(auth, u => { 
+                window.currentUser = u; 
+                console.log("Logged in as:", u?.uid);
+            });
+        } else {
+            // Show UI warning if user hasn't setup keys yet
+            document.getElementById('setup-warning').classList.remove('hidden');
+        }
+
+        window.startTime = 0;
+        window.timeA = 0;
+        window.timeB = 0;
+        window.scoreA = 0;
+        window.scoreB = 0;
+        window.roomLight = "";
+
+        function showScreen(id) {
+            document.querySelectorAll('.container').forEach(el => el.classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        }
+
         window.checkSurveyAndStart = () => {
             const selected = document.querySelector('input[name="room-light"]:checked');
             if (selected) {
-                roomLight = selected.value;
+                window.roomLight = selected.value;
                 showScreen('story-a-screen');
-                startTime = Date.now();
+                window.startTime = Date.now();
             } else {
                 document.getElementById('survey-error').style.display = 'block';
             }
         };
 
         window.finishStoryA = () => {
-            timeA = ((Date.now() - startTime) / 1000).toFixed(2);
+            window.timeA = ((Date.now() - window.startTime) / 1000).toFixed(2);
             showScreen('quiz-a-screen');
         };
 
         window.submitQuizA = () => {
-            scoreA = calculateScore({ q1: 'key', q2: 'flower', q3: 'crow' }, ['q1', 'q2', 'q3']);
+            window.scoreA = 0;
+            if(document.querySelector('input[name="q1"]:checked')?.value === 'key') window.scoreA++;
+            if(document.querySelector('input[name="q3"]:checked')?.value === 'crow') window.scoreA++;
             showScreen('break-screen');
         };
 
         window.startPartTwo = () => {
             document.body.classList.replace('light-mode-bg', 'dark-mode-bg');
             showScreen('story-b-screen');
-            startTime = Date.now();
+            window.startTime = Date.now();
         };
 
         window.finishStoryB = () => {
-            timeB = ((Date.now() - startTime) / 1000).toFixed(2);
+            window.timeB = ((Date.now() - window.startTime) / 1000).toFixed(2);
             showScreen('quiz-b-screen');
         };
 
         window.submitQuizB = async () => {
-            scoreB = calculateScore({ q4: 'sandwich', q5: 'bump', q6: 'net' }, ['q4', 'q5', 'q6']);
-            await saveData();
-        };
+            window.scoreB = 0;
+            if(document.querySelector('input[name="q4"]:checked')?.value === 'sandwich') window.scoreB++;
+            if(document.querySelector('input[name="q6"]:checked')?.value === 'net') window.scoreB++;
+            
+            if(!isConfigValid || !window.currentUser) {
+                alert("The app is not connected to a database. Please check that you entered your Firebase API Key in the code.");
+                return;
+            }
 
-        async function saveData() {
-            if (!user) return alert("Connecting to cloud... try again in 2 seconds.");
             document.getElementById('loading-overlay').classList.remove('hidden');
             
             try {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'results'), {
-                    roomLight,
-                    timeA: parseFloat(timeA),
-                    scoreA,
-                    timeB: parseFloat(timeB),
-                    scoreB,
-                    userId: user.uid,
+                await addDoc(collection(db, collectionName), {
+                    roomLight: window.roomLight, 
+                    timeA: window.timeA, 
+                    scoreA: window.scoreA, 
+                    timeB: window.timeB, 
+                    scoreB: window.scoreB,
+                    userId: window.currentUser.uid,
                     timestamp: Timestamp.now()
                 });
-                
-                showIndividualSummary();
+                document.getElementById('personal-summary').innerHTML = `Last Test: Light ${window.timeA}s | Dark ${window.timeB}s`;
                 showScreen('results-screen');
                 document.body.classList.replace('dark-mode-bg', 'light-mode-bg');
             } catch (e) {
-                console.error("Save error", e);
-                alert("Error saving data.");
+                alert("Save Error: " + e.message);
+                console.error(e);
             } finally {
                 document.getElementById('loading-overlay').classList.add('hidden');
             }
-        }
-
-        window.showDashboard = async () => {
-            if (!user) return;
-            showScreen('dashboard-screen');
-            const tableBody = document.getElementById('data-rows');
-            tableBody.innerHTML = "<tr><td colspan='5'>Loading...</td></tr>";
-            
-            try {
-                const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'results'));
-                const querySnapshot = await getDocs(q);
-                tableBody.innerHTML = "";
-                document.getElementById('total-count').innerText = querySnapshot.size;
-                
-                const docs = [];
-                querySnapshot.forEach(doc => docs.push(doc.data()));
-                docs.sort((a, b) => b.timestamp.toMillis() - a.timestamp.toMillis());
-
-                docs.forEach((data) => {
-                    const dateObj = data.timestamp.toDate();
-                    const dateStr = dateObj.toLocaleDateString() + " " + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    
-                    const row = `<tr>
-                        <td>${dateStr}</td>
-                        <td><span class="id-badge">${data.userId.substring(0, 6)}...</span></td>
-                        <td>${data.roomLight}</td>
-                        <td>${data.timeA}s (${data.scoreA}/3)</td>
-                        <td>${data.timeB}s (${data.scoreB}/3)</td>
-                    </tr>`;
-                    tableBody.innerHTML += row;
-                });
-            } catch (e) {
-                tableBody.innerHTML = "<tr><td colspan='5'>Error loading results.</td></tr>";
-            }
         };
 
-        function showIndividualSummary() {
-            const summary = `
-                <strong>Session Saved!</strong><br>
-                User ID: ${user.uid.substring(0, 8)}...<br>
-                Light Mode: ${timeA}s | Dark Mode: ${timeB}s
-            `;
-            document.getElementById('individual-result-summary').innerHTML = summary;
-        }
-
-        function calculateScore(keys, names) {
-            let s = 0;
-            names.forEach(n => {
-                const sel = document.querySelector(`input[name="${n}"]:checked`);
-                if (sel && sel.value === keys[n]) s++;
-            });
-            return s;
-        }
-
-        function showScreen(id) {
-            document.querySelectorAll('.container').forEach(el => el.classList.add('hidden'));
-            document.getElementById(id).classList.remove('hidden');
-        }
+        window.showDashboard = async () => {
+            if(!isConfigValid || !window.currentUser) {
+                alert("Database connection is not active. Setup your Firebase keys first.");
+                return;
+            }
+            showScreen('dashboard-screen');
+            const tbody = document.getElementById('data-rows');
+            tbody.innerHTML = "<tr><td colspan='5'>Loading...</td></tr>";
+            try {
+                const snap = await getDocs(query(collection(db, collectionName)));
+                tbody.innerHTML = "";
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    const date = d.timestamp?.toDate().toLocaleTimeString() || "Unknown";
+                    tbody.innerHTML += `<tr>
+                        <td>${date}</td>
+                        <td>${d.userId ? d.userId.substring(0,5) : '??'}</td>
+                        <td>${d.roomLight || '??'}</td>
+                        <td>${d.timeA}s (${d.scoreA}/2)</td>
+                        <td>${d.timeB}s (${d.scoreB}/2)</td>
+                    </tr>`;
+                });
+                if (snap.empty) {
+                    tbody.innerHTML = "<tr><td colspan='5'>No results yet!</td></tr>";
+                }
+            } catch (e) { 
+                alert("Load Error: " + e.message); 
+                console.error(e);
+            }
+        };
     </script>
 </body>
 </html>
