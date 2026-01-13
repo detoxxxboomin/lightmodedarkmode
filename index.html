@@ -67,7 +67,6 @@
             align-items: center; z-index: 1000; font-weight: bold; color: black;
         }
 
-        .id-badge { font-family: monospace; background: #ddd; padding: 2px 5px; border-radius: 3px; }
         .error-banner { background: #fee2e2; color: #991b1b; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #f87171; }
     </style>
 </head>
@@ -80,7 +79,9 @@
         <h1>Science Project: Light vs. Dark</h1>
         
         <div id="setup-warning" class="error-banner hidden">
-            <strong>Connection Error:</strong> Check your internet or Firebase Authorized Domains.
+            <strong>Connection Error:</strong> Could not connect to your project. 
+            <br>1. Check internet. 
+            <br>2. Enable "Anonymous Auth" in Firebase Console.
         </div>
 
         <p>Help me find out if screen colors change how we read!</p>
@@ -169,9 +170,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
-        import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, query, Timestamp, orderBy } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
-        // Configuration fully updated with your project credentials
         const firebaseConfig = {
             apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
             authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
@@ -184,7 +184,9 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
-        const collectionName = "experiment_results";
+        
+        // Use a clean root collection for custom project credentials
+        const resultsRef = collection(db, 'experiment_results');
 
         let user = null;
         window.startTime = 0;
@@ -194,8 +196,11 @@
         window.scoreB = 0;
         window.roomLight = "";
 
-        signInAnonymously(auth).catch(e => {
-            console.error("Auth Error", e);
+        signInAnonymously(auth).then(cred => {
+            window.currentUser = cred.user;
+            console.log("Logged in anonymously:", cred.user.uid);
+        }).catch(e => {
+            console.error("Auth Error:", e);
             document.getElementById('setup-warning').classList.remove('hidden');
         });
 
@@ -248,28 +253,29 @@
             if(document.querySelector('input[name="q6"]:checked')?.value === 'net') window.scoreB++;
             
             if(!window.currentUser) {
-                alert("The app is not connected to a database. Please check your internet connection.");
+                alert("Wait a second, still connecting to your Firebase...");
                 return;
             }
 
             document.getElementById('loading-overlay').classList.remove('hidden');
             
             try {
-                await addDoc(collection(db, collectionName), {
+                await addDoc(resultsRef, {
                     roomLight: window.roomLight, 
-                    timeA: window.timeA, 
+                    timeA: parseFloat(window.timeA), 
                     scoreA: window.scoreA, 
-                    timeB: window.timeB, 
+                    timeB: parseFloat(window.timeB), 
                     scoreB: window.scoreB,
                     userId: window.currentUser.uid,
                     timestamp: Timestamp.now()
                 });
-                document.getElementById('personal-summary').innerHTML = `Last Test: Light ${window.timeA}s | Dark ${window.timeB}s`;
+                
+                document.getElementById('personal-summary').innerHTML = `Session Saved! Light: ${window.timeA}s | Dark: ${window.timeB}s`;
                 showScreen('results-screen');
                 document.body.classList.replace('dark-mode-bg', 'light-mode-bg');
             } catch (e) {
-                alert("Save Error: " + e.message);
-                console.error(e);
+                console.error("Save Error:", e);
+                alert("Could not save to Cloud. Error: " + e.message);
             } finally {
                 document.getElementById('loading-overlay').classList.add('hidden');
             }
@@ -277,18 +283,24 @@
 
         window.showDashboard = async () => {
             if(!window.currentUser) {
-                alert("Database connection is not active.");
+                alert("Database connection is not ready yet.");
                 return;
             }
             showScreen('dashboard-screen');
             const tbody = document.getElementById('data-rows');
-            tbody.innerHTML = "<tr><td colspan='5'>Loading...</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='5'>Loading data...</td></tr>";
             try {
-                const snap = await getDocs(query(collection(db, collectionName)));
+                const snap = await getDocs(query(resultsRef));
                 tbody.innerHTML = "";
-                snap.forEach(doc => {
-                    const d = doc.data();
-                    const date = d.timestamp?.toDate().toLocaleTimeString() || "Unknown";
+                
+                const items = [];
+                snap.forEach(doc => items.push(doc.data()));
+                
+                // Sort by time (most recent first)
+                items.sort((a,b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+
+                items.forEach(d => {
+                    const date = d.timestamp?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) || "??";
                     tbody.innerHTML += `<tr>
                         <td>${date}</td>
                         <td>${d.userId ? d.userId.substring(0,5) : '??'}</td>
@@ -297,12 +309,10 @@
                         <td>${d.timeB}s (${d.scoreB}/2)</td>
                     </tr>`;
                 });
-                if (snap.empty) {
-                    tbody.innerHTML = "<tr><td colspan='5'>No results yet!</td></tr>";
-                }
+                if (items.length === 0) tbody.innerHTML = "<tr><td colspan='5'>No results in database yet.</td></tr>";
             } catch (e) { 
-                alert("Load Error: " + e.message); 
-                console.error(e);
+                console.error("Load Error:", e);
+                tbody.innerHTML = `<tr><td colspan='5' style="color:red">Error: ${e.message}</td></tr>`;
             }
         };
     </script>
