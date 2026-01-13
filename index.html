@@ -88,7 +88,7 @@
 </head>
 <body class="light-mode-bg">
 
-    <!-- Loading Overlay (Visible by default until Auth succeeds) -->
+    <!-- Loading Overlay -->
     <div id="loading-overlay">
         <div id="loading-text" style="font-size: 1.5rem;">Connecting to Cloud...</div>
         <div class="status-dot"><div id="status-progress" class="status-progress"></div></div>
@@ -98,11 +98,13 @@
             <div id="error-log" style="background:#fff; padding:10px; border-radius:5px; margin: 10px 0; border: 1px solid #ddd; min-height: 40px; color: #d32f2f;">
                 Waiting for response from Google...
             </div>
-            <p style="text-align:left; margin-bottom: 5px;"><strong>Common Fixes:</strong></p>
-            <ul style="text-align:left; margin-top: 0;">
-                <li>Check if "Anonymous" is ON in Firebase Auth tab.</li>
-                <li>Make sure you created the "Firestore" database.</li>
-                <li>Check that Rules allow "read, write: if true".</li>
+            
+            <button class="secondary" style="margin-top:0; font-size:0.8rem; padding: 8px;" onclick="location.reload()">🔄 Retry Connection</button>
+            
+            <p style="text-align:left; margin-top: 15px; margin-bottom: 5px;"><strong>Check these in Firebase:</strong></p>
+            <ul style="text-align:left; margin-top: 0; font-size: 0.75rem;">
+                <li><strong>Build > Authentication > Sign-in Method:</strong> Enable "Anonymous".</li>
+                <li><strong>Build > Firestore Database > Rules:</strong> Set to "allow read, write: if true;".</li>
             </ul>
             <button class="warning" id="bypass-btn" onclick="bypassCloud()" style="display:none;">⚠️ Use Without Cloud (Save Locally Only)</button>
         </div>
@@ -130,7 +132,7 @@
         <p id="survey-error" style="color: red; display: none;">Please pick an option!</p>
     </div>
 
-    <!-- Experiment Screens -->
+    <!-- Story/Quiz Screens remain same for consistency -->
     <div id="story-a-screen" class="container hidden">
         <h2>Story 1: The Lost Key</h2>
         <p>Sammy was playing in the backyard when he realized his pocket felt light. He tapped his jeans. Empty! The shiny silver key to the garden shed was gone. "Oh no," Sammy whispered. His dad needed that key to get the lawnmower.</p>
@@ -201,9 +203,10 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
+        // Current Config
         const firebaseConfig = {
             apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
             authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
@@ -220,49 +223,52 @@
         const logError = (err) => {
             const el = document.getElementById('error-log');
             if(el) el.innerText = err;
-            console.error("Firebase Error:", err);
         };
 
-        // Initialize Firebase
-        try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
-            resultsRef = collection(db, 'experiment_results');
+        async function initFirebase() {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                resultsRef = collection(db, 'experiment_results');
 
-            signInAnonymously(auth).then(cred => {
+                const cred = await signInAnonymously(auth);
                 currentUser = cred.user;
+                
+                // Success!
                 document.getElementById('status-progress').style.width = "100%";
                 document.getElementById('loading-overlay').classList.add('hidden');
                 document.getElementById('intro-screen').classList.remove('hidden');
-            }).catch(e => {
-                logError(e.code + ": " + e.message);
-                if(e.code === "auth/operation-not-allowed") {
-                    logError("CRITICAL: You must enable 'Anonymous' sign-in in the Firebase Console!");
+            } catch (e) {
+                console.error(e);
+                if (e.code === 'auth/operation-not-allowed') {
+                    logError("Fix Needed: Go to Authentication -> Sign-in Method and enable 'Anonymous'.");
+                } else {
+                    logError(e.message || "Unknown error connecting to Google.");
                 }
-            });
-        } catch (e) {
-            logError("Initialization Failed: " + e.message);
+            }
         }
 
-        // Show Bypass Button after 8 seconds
+        // Start Initial Connection
+        initFirebase();
+
+        // Show Bypass Button after 10 seconds
         setTimeout(() => {
             if (!currentUser) {
                 document.getElementById('bypass-btn').style.display = 'block';
-                document.getElementById('loading-text').innerText = "Connection Taking Too Long...";
+                document.getElementById('loading-text').innerText = "Network Delay Detected";
             }
-        }, 8000);
+        }, 10000);
 
         window.bypassCloud = () => {
             isBypassed = true;
             document.getElementById('loading-overlay').classList.add('hidden');
             document.getElementById('intro-screen').classList.remove('hidden');
             document.getElementById('setup-warning').classList.remove('hidden');
-            document.getElementById('error-msg').innerText = "Running in Local Mode (Offline). Data will not be saved to the cloud.";
-            document.getElementById('dash-btn').disabled = true;
+            document.getElementById('error-msg').innerText = "Local Mode Active. Data will only stay on this screen.";
         };
 
-        // App Logic
+        // Logic functions
         window.startTime = 0;
         window.timeA = 0;
         window.timeB = 0;
@@ -315,7 +321,7 @@
             if(document.querySelector('input[name="q6"]:checked')?.value === 'net') window.scoreB++;
             
             if(isBypassed) {
-                document.getElementById('personal-summary').innerHTML = `Local Mode: Light: ${window.timeA}s | Dark: ${window.timeB}s`;
+                document.getElementById('personal-summary').innerHTML = `Local Only: L: ${window.timeA}s | D: ${window.timeB}s`;
                 showScreen('results-screen');
                 return;
             }
@@ -327,43 +333,34 @@
                     scoreA: window.scoreA, 
                     timeB: parseFloat(window.timeB), 
                     scoreB: window.scoreB,
-                    userId: currentUser?.uid || "unknown",
+                    userId: currentUser.uid,
                     timestamp: Timestamp.now()
                 });
-                
-                document.getElementById('personal-summary').innerHTML = `Success! Light: ${window.timeA}s | Dark: ${window.timeB}s`;
+                document.getElementById('personal-summary').innerHTML = `Saved! Light: ${window.timeA}s | Dark: ${window.timeB}s`;
                 showScreen('results-screen');
-                document.body.classList.replace('dark-mode-bg', 'light-mode-bg');
             } catch (e) {
-                alert("Cloud Save Failed: " + e.message);
+                alert("Cloud save failed. Use local mode next time!");
             }
         };
 
         window.showDashboard = async () => {
             showScreen('dashboard-screen');
             const tbody = document.getElementById('data-rows');
-            tbody.innerHTML = "<tr><td colspan='5'>Loading spreadsheet...</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='5'>Loading...</td></tr>";
             try {
                 const snap = await getDocs(query(resultsRef));
                 tbody.innerHTML = "";
-                const items = [];
-                snap.forEach(doc => items.push(doc.data()));
-                items.sort((a,b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
-
-                items.forEach(d => {
-                    const date = d.timestamp?.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) || "??";
+                snap.forEach(doc => {
+                    const d = doc.data();
                     tbody.innerHTML += `<tr>
-                        <td>${date}</td>
-                        <td>${d.userId ? d.userId.substring(0,5) : '??'}</td>
-                        <td>${d.roomLight || '??'}</td>
-                        <td>${d.timeA}s (${d.scoreA}/2)</td>
-                        <td>${d.timeB}s (${d.scoreB}/2)</td>
+                        <td>${d.timestamp?.toDate().toLocaleTimeString() || '--'}</td>
+                        <td>${d.userId.substring(0,5)}</td>
+                        <td>${d.roomLight}</td>
+                        <td>${d.timeA}s</td>
+                        <td>${d.timeB}s</td>
                     </tr>`;
                 });
-                if (items.length === 0) tbody.innerHTML = "<tr><td colspan='5'>No results found.</td></tr>";
-            } catch (e) { 
-                tbody.innerHTML = `<tr><td colspan='5' style="color:red">Error: ${e.message}</td></tr>`;
-            }
+            } catch (e) { tbody.innerHTML = "Error loading data."; }
         };
     </script>
 </body>
