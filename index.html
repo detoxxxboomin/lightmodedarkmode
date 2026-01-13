@@ -63,14 +63,16 @@
         
         #loading-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(255,255,255,0.8); display: flex; justify-content: center;
+            background: rgba(255,255,255,0.95); display: flex; justify-content: center;
             align-items: center; z-index: 1000; font-weight: bold; color: black;
-            flex-direction: column;
+            flex-direction: column; text-align: center; padding: 20px;
         }
 
-        .error-banner { background: #fee2e2; color: #991b1b; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #f87171; }
-        .status-dot { height: 10px; width: 100px; background: #ccc; border-radius: 5px; margin-top: 10px; overflow: hidden; }
+        .error-banner { background: #fee2e2; color: #991b1b; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #f87171; font-size: 0.9rem; }
+        .status-dot { height: 10px; width: 200px; background: #ccc; border-radius: 5px; margin-top: 15px; overflow: hidden; }
         .status-progress { height: 100%; width: 0%; background: #4CAF50; transition: width 0.3s; }
+        
+        #debug-info { margin-top: 20px; font-family: monospace; font-size: 0.7rem; color: #666; max-width: 400px; }
     </style>
 </head>
 <body class="light-mode-bg">
@@ -78,6 +80,15 @@
     <div id="loading-overlay" class="hidden">
         <div id="loading-text">Connecting to Cloud...</div>
         <div class="status-dot"><div id="status-progress" class="status-progress"></div></div>
+        <div id="debug-info" class="hidden">
+            <p style="color:red; font-weight:bold;">Still waiting? Possible fixes:</p>
+            <ol style="text-align:left;">
+                <li>Enable <b>Anonymous Auth</b> in Firebase Console.</li>
+                <li>Ensure <b>Cloud Firestore</b> is "Created" in your project.</li>
+                <li>Check your Firestore <b>Rules</b> are set to "allow read, write".</li>
+            </ol>
+            <div id="error-log" style="background:#ddd; padding:5px; border-radius:3px;">No errors yet...</div>
+        </div>
     </div>
 
     <!-- Screen 1: Intro -->
@@ -85,10 +96,9 @@
         <h1>Science Project: Light vs. Dark</h1>
         
         <div id="setup-warning" class="error-banner hidden">
-            <strong>Database Error:</strong> The app is having trouble talking to Google Firebase. 
+            <strong>Critical Connection Error:</strong> <span id="error-msg">Check your Firebase settings.</span>
             <br><br>
-            1. Go to <strong>Authentication</strong> in Firebase and enable <strong>Anonymous</strong>.
-            <br>2. Ensure your <strong>Firestore Rules</strong> allow "read, write".
+            Make sure <strong>Anonymous Authentication</strong> is enabled!
         </div>
 
         <p>Help me find out if screen colors change how we read!</p>
@@ -179,7 +189,6 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
         import { getFirestore, collection, addDoc, getDocs, query, Timestamp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
-        // Your Exact Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyAdZU76cO6hjhQt9h0PgnLoL9hpA7eHToc",
             authDomain: "lightmodedarkmode-d6305.firebaseapp.com",
@@ -192,31 +201,39 @@
         let app, auth, db, resultsRef;
         let currentUser = null;
 
-        // Initialize Firebase with Status Tracking
+        // Diagnostic helper
+        const logError = (err) => {
+            const el = document.getElementById('error-log');
+            if(el) el.innerText = err;
+            document.getElementById('setup-warning').classList.remove('hidden');
+            document.getElementById('error-msg').innerText = err;
+        };
+
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
             resultsRef = collection(db, 'experiment_results');
-            console.log("Firebase Initialized");
         } catch (e) {
-            console.error("Initialization Failed", e);
-            document.getElementById('setup-warning').classList.remove('hidden');
+            logError("Init Error: " + e.message);
         }
 
-        // Handle Authentication
+        // Auto-show Troubleshooter after 5 seconds if not connected
+        setTimeout(() => {
+            if (!currentUser) {
+                document.getElementById('debug-info').classList.remove('hidden');
+            }
+        }, 5000);
+
         signInAnonymously(auth).then(cred => {
             currentUser = cred.user;
-            console.log("Auth Success:", currentUser.uid);
             document.getElementById('status-progress').style.width = "100%";
+            console.log("Connected as:", currentUser.uid);
         }).catch(e => {
-            console.error("Auth Error:", e);
-            document.getElementById('setup-warning').classList.remove('hidden');
+            logError("Auth Error: " + e.message);
         });
 
-        onAuthStateChanged(auth, u => { 
-            currentUser = u; 
-        });
+        onAuthStateChanged(auth, u => { currentUser = u; });
 
         // App Logic
         window.startTime = 0;
@@ -271,14 +288,14 @@
             if(document.querySelector('input[name="q6"]:checked')?.value === 'net') window.scoreB++;
             
             if(!currentUser) {
-                alert("The app is still trying to connect to Google. Please wait 5 seconds.");
+                alert("Database not connected. Please check the home screen for errors.");
                 return;
             }
 
             const overlay = document.getElementById('loading-overlay');
             const progress = document.getElementById('status-progress');
             overlay.classList.remove('hidden');
-            progress.style.width = "30%";
+            progress.style.width = "40%";
             
             try {
                 await addDoc(resultsRef, {
@@ -296,8 +313,8 @@
                 showScreen('results-screen');
                 document.body.classList.replace('dark-mode-bg', 'light-mode-bg');
             } catch (e) {
-                console.error("Save Error:", e);
-                alert("Could not save. Check your Firestore Rules! Error: " + e.message);
+                logError("Save Error: " + e.message);
+                alert("Save Failed: " + e.message);
             } finally {
                 setTimeout(() => overlay.classList.add('hidden'), 500);
             }
@@ -305,7 +322,7 @@
 
         window.showDashboard = async () => {
             if(!currentUser) {
-                alert("Database is not connected. Check your internet or Firebase settings.");
+                alert("Database not connected.");
                 return;
             }
             showScreen('dashboard-screen');
@@ -330,9 +347,9 @@
                         <td>${d.timeB}s (${d.scoreB}/2)</td>
                     </tr>`;
                 });
-                if (items.length === 0) tbody.innerHTML = "<tr><td colspan='5'>No results found in your database.</td></tr>";
+                if (items.length === 0) tbody.innerHTML = "<tr><td colspan='5'>No results yet.</td></tr>";
             } catch (e) { 
-                console.error("Load Error:", e);
+                logError("Load Error: " + e.message);
                 tbody.innerHTML = `<tr><td colspan='5' style="color:red">Error: ${e.message}</td></tr>`;
             }
         };
